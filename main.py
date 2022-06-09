@@ -29,21 +29,31 @@ def upload_file(page: Page, lease: tuple[str, str, str], filename: str):
         page.fill("#Name", "Insurance")
         page.click("#saveFolderButton")
         print("Made new insurance folder")
+        page.wait_for_selector(".folder-list")
 
-
-    # Wait for load state to click button
-    # page.wait_for_timeout(3000)
+    # Wait for load state to click button # page.wait_for_timeout(3000)
     page.wait_for_function('document.querySelector("ul > li[data-folderid].selected > a > span").innerText == "Insurance"')
     page.query_selector("#documentUpload").click()
-    print("Upload button clicked!")
+    # print("Upload button clicked!")
     
     page.wait_for_selector(".attachment-upload-button")
     page.click(".attachment-upload-button")
-    print("Real attachment button clicked!")
-    page.set_input_files("#fileupload", filename) 
-    print("Hidden input set_input_files")
+    # print("Real attachment button clicked!")
 
-    print("Done!")
+    page.set_input_files("#fileupload", filename) 
+    # print("Hidden input set_input_files")
+
+    expir = input("What is the expiration date? (MM/DD/YYYY) ")
+    page.fill("#DocumentList_0__Title", f"Insurance Exp ({expir})")
+
+    page.click("#save-attachments")
+
+    try:
+        page.wait_for_selector(".open > tbody > [data-id]")
+        print("Saved!")
+    except Exception as e:
+        print("Error:", e)
+        print("Could not save file!")
 
 
 def select_a_lease(properties: dict):
@@ -144,13 +154,8 @@ def upload_insurance(page: Page):
         print(filename)
 
         upload_file(page, lease, filename)
-        
-        expir = input("What is the expiration date? (MM/DD/YYYY) ")
-        page.fill("#DocumentList_0__Title", f"Insurance Exp ({expir})")
 
-        input("TODO!")
-
-        page.click("#save-attachments")
+        print("Saving!")
         
 
 def menu(browser: Browser, page: Page ):
