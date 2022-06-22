@@ -1,11 +1,9 @@
-from playwright.sync_api import sync_playwright, Page, Browser, FileChooser
+from playwright.sync_api import sync_playwright, Page, Browser
+from util.login import launch, new_login
 from tkinter import filedialog, Tk
-from dotenv import load_dotenv
-load_dotenv()
-import json
-import os
+import util.reminders as reminder
 
-CACHE_DIR = f"{os.path.dirname(__file__)}/cache"
+
 Tk().withdraw()
 
 def upload_file(page: Page, lease: tuple[str, str, str], filename: str):
@@ -13,22 +11,22 @@ def upload_file(page: Page, lease: tuple[str, str, str], filename: str):
     page.goto(f"https://us1.re-leased.com/Lease/Edit/{lease_id}?SortBy=0&leaseFilterTab=Current&applyTenancyFunds=False&returnToFolder=False&leaseTab=7")
     page.wait_for_selector("[data-cy=documents]")
     
-    page.on("filechooser", lambda file_chooser: (file_chooser.set_files(filename), print("File added!")))
+    page.on("filechooser", lambda file_chooser: (file_chooser.set_files(filename)))  #, print("File added!")))
 
     folder_exists = False
     for folder in page.query_selector_all("[data-folderid].droppable.ui-droppable > a > span"):
-        print("Folder", folder.inner_text())
+        # print("Folder", folder.inner_text())
         if folder.inner_text() == "Insurance":
             folder_exists = True
             folder.click()
             break
 
     if not folder_exists:
-        print("Folder does not exist")
+        # print("Folder does not exist")
         page.query_selector("[data-cy=create-new-folder]").click()
         page.fill("#Name", "Insurance")
         page.click("#saveFolderButton")
-        print("Made new insurance folder")
+        # print("Made new insurance folder")
         page.wait_for_selector(".folder-list")
 
     # Wait for load state to click button # page.wait_for_timeout(3000)
@@ -43,20 +41,26 @@ def upload_file(page: Page, lease: tuple[str, str, str], filename: str):
     page.set_input_files("#fileupload", filename) 
     # print("Hidden input set_input_files")
 
-    expir = input("What is the expiration date? (MM/DD/YYYY) ")
+    d, expir = reminder.get_date()
+
     page.fill("#DocumentList_0__Title", f"Insurance Exp ({expir})")
 
     page.click("#save-attachments")
 
     try:
         page.wait_for_selector(".open > tbody > [data-id]")
-        print("Saved!")
+        print("\nSaved file!")
+        reminder.make(page, expir, d, delta=14, lease_id=lease_id)
+        reminder.make(page, expir, d, delta=1, lease_id=lease_id)
+        print("Created Reminders!\n")
     except Exception as e:
         print("Error:", e)
         print("Could not save file!")
 
+    
 
-def select_a_lease(properties: dict):
+
+def select_a_lease(properties: dict[str, dict[str, str]], browser: Browser, page: Page):
     prop = None
     lease = None
     lease_id = None
@@ -66,10 +70,13 @@ def select_a_lease(properties: dict):
         print("Properties:")
         for i, prop in enumerate(properties):
             print(f"\t{i+1}. {prop}")
+        print(f"\t{len(properties)+1}. Go back")
+
         inp = input("Which property? ")
 
         if inp.isdigit() == False: continue
-        if int(inp) <= 0 or int(inp) > len(properties): continue
+        if int(inp) <= 0 or int(inp) > len(properties)+1: continue
+        if int(inp) == len(properties)+1: return menu(browser, page)
 
         prop = list(properties.keys())[int(inp)-1]
         break
@@ -84,7 +91,7 @@ def select_a_lease(properties: dict):
 
         if inp.isdigit() == False: continue
         if int(inp) <= 0 or int(inp) > len(properties[prop])+1: continue
-        if int(inp) == len(properties[prop])+1: return select_a_lease(properties)
+        if int(inp) == len(properties[prop])+1: return select_a_lease(properties, browser, page)
 
         lease = list(properties[prop].keys())[int(inp)-1]
         lease_id = properties[prop][lease]
@@ -93,7 +100,7 @@ def select_a_lease(properties: dict):
     return (prop, lease, lease_id)
 
 
-def get_leases(page: Page, properties: dict):
+def get_leases(page: Page, properties: dict[str, dict[str, str]]):
     page.wait_for_load_state()
 
     # Check if pagination
@@ -117,7 +124,7 @@ def get_leases(page: Page, properties: dict):
     return (properties, next_button)
 
 
-def upload_insurance(page: Page):
+def upload_insurance(page: Page, browser: Browser):
     # Go to Leases Page
     page.goto("https://us1.re-leased.com/Lease")
     
@@ -146,69 +153,37 @@ def upload_insurance(page: Page):
 
     while True:
         # Print Leases # print(json.dumps(properties, indent=4, sort_keys=True))
-        lease = select_a_lease(properties)
+        lease = select_a_lease(properties, browser, page)
         print("Lease Chosen:", lease[1])
 
-        print("Select the file to upload: ", end="")
-        filename = filedialog.askopenfilename(filetypes=[("PDF", "*.pdf")])
-        print(filename)
+        while True:
+            print("Select the file to upload: ", end="", flush=True)
+            filename = filedialog.askopenfilename(filetypes=[("PDF", "*.pdf")])
+            if not filename: print("No file selected!\n"); continue
+            print(filename); break
 
         upload_file(page, lease, filename)
-
-        print("Saving!")
         
 
-def menu(browser: Browser, page: Page ):
+def menu(browser: Browser, page: Page):
     while True:
         inp = input("""
-Menu:
+What would you like to do?
 \t1. Upload Insurance Documents
-\t2. Quit
-What would you like to do? """)
+\t2. Change Login Email & Password
+\t3. Quit
+Pick one: """)
         print()
 
-        if inp == "1": upload_insurance(page)
-        if inp == "2": browser.close(), print("Application closed."), exit()
-
-
-def login(browser: Browser, page: Page):
-    page.goto("https://signin.re-leased.com/")
-    
-    # Sign In
-    page.fill("#Email", os.getenv("EMAIL"))
-    page.fill("#Password", os.getenv("PASSWORD"))
-
-    # Click 'Remember Me'
-    page.click(".checkbox")
-    
-    # Click 'Sign In'
-    page.click("body > div > section.login > form > div:nth-child(2) > div > input")
-
-    # Save context to cache folder
-    browser.contexts[0].storage_state(path=f"{CACHE_DIR}/state.json")
+        if inp == "1": upload_insurance(page, browser)
+        if inp == "2": browser, page = new_login(browser, resign=True)
+        if inp == "3": browser.close(); print("Application closed."); exit()
 
 
 def main():
-
     with sync_playwright() as p:
-        print("Logging in...")
-        browser = p.chromium.launch(headless=False, slow_mo=0)
-
-        # Make folder and login
-        if os.path.exists(CACHE_DIR) == False:
-            os.mkdir(CACHE_DIR)
-            page = browser.new_page()
-            login(browser, page)
-        else: 
-        # Load context from cache and go to home page
-            context = browser.new_context(storage_state=f"{CACHE_DIR}/state.json")
-            page = context.new_page()
-            page.goto("https://us1.re-leased.com/")
-            page.wait_for_load_state()
-         
-        # If state cookies timeout, login again
-        if page.url == "https://signin.re-leased.com/?returnUrl=%2F":
-            login(browser, page)
+        # Launch browser and login
+        browser, page = launch(p)
 
         # Main Menu
         menu(browser, page)

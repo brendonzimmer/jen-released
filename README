@@ -1,0 +1,7 @@
+Make sure you install Python
+    - https://www.python.org/downloads/
+
+Then run the following command
+    - "pip install playwright dotenv"
+
+Right now it adds reminders too but does not complete any and does not remove previous ones

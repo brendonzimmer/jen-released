@@ -1,3 +1,9 @@
-cache
-.env
 .DS_Store
+
+.env
+
+cache
+__pycache__
+
+*.xlsx
+*.rtf
